@@ -1,0 +1,5 @@
+grpcio==1.67.0
+grpcio-tools==1.67.0
+azure-mgmt-applicationinsights
+azure-identity
+py-rolldice

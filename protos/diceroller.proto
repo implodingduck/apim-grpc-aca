@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package diceroller;
+
+service Diceroller {
+    rpc Roll(Dice) returns (DiceResult);
+}
+
+message Dice {
+    string dice = 1;
+}
+
+message DiceResult {
+    string input = 1;
+    string result = 2;
+}

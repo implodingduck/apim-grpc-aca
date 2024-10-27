@@ -1,0 +1,14 @@
+version: '3.9'
+
+services:
+  grpcbackend:
+    build: ./grpcbackend
+    ports:
+      - 8081:50051
+      
+  grpcclient:
+    build: ./grpcclient
+    ports:
+      - 8080:80
+    environment:
+      GRPC_ENDPOINT: apim-grpc-aca_grpcbackend_1:50051
