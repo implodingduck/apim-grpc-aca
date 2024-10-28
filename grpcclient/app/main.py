@@ -1,30 +1,61 @@
 from typing import Union
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 import os
 import grpc
 from app.pb.diceroller_pb2 import Dice, DiceResult
 from app.pb.diceroller_pb2_grpc import DicerollerStub
 
-
-from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
 from azure.monitor.opentelemetry import configure_azure_monitor
 
-from logging import getLogger, INFO
+from logging import getLogger
+from logging.config import dictConfig
 
-if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
-    configure_azure_monitor()
+log_config = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "()": "uvicorn.logging.DefaultFormatter",
+            "fmt": "%(levelprefix)s %(asctime)s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
 
-trace.set_tracer_provider(TracerProvider())
-tracer = trace.get_tracer(__name__)
+        },
+    },
+    "handlers": {
+        "default": {
+            "formatter": "default",
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
+        },
+    },
+    "loggers": {
+        "api-logger": {"handlers": ["default"], "level": "DEBUG"},
+        #"azure.monitor.opentelemetry": {"handlers": ["default"], "level": "DEBUG"},
+    },
+}
 
+dictConfig(log_config)
+logger = getLogger("api-logger")
+logger.info(os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"))
 
-logger = getLogger(__name__)
+configure_azure_monitor(connection_string=os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"))
 
 app = FastAPI()
 
+origins = [
+    "*"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def read_root():

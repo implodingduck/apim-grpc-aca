@@ -78,6 +78,12 @@ resource "azurerm_role_assignment" "reader" {
   principal_id         = azurerm_user_assigned_identity.this.principal_id
 }
 
+resource "azurerm_role_assignment" "mmp" {
+  scope                = azurerm_resource_group.rg.id
+  role_definition_name = "Monitoring Metrics Publisher"
+  principal_id         = azurerm_user_assigned_identity.this.principal_id
+}
+
 resource "azurerm_container_app_environment" "this" {
   name                       = "ace-${local.cluster_name}"
   location                   = azurerm_resource_group.rg.location
