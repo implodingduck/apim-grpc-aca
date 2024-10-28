@@ -118,10 +118,9 @@ resource "azurerm_container_app" "grpcbackend" {
 
   ingress {
     target_port = 50051
-    transport = "tcp"
-    allow_insecure_connections = false
-    external_enabled = false
-    exposed_port = 50051
+    transport = "http2"
+    allow_insecure_connections = true
+    external_enabled = true
     
     traffic_weight {
       latest_revision = true
@@ -158,7 +157,7 @@ resource "azurerm_container_app" "grpcclient" {
 
       env {
         name  = "GRPC_ENDPOINT"
-        value = "${azurerm_container_app.grpcbackend.name}:50051"
+        value = "${azurerm_container_app.grpcbackend.ingress[0].fqdn}:443"
       }
       
     }
@@ -208,7 +207,7 @@ resource "azurerm_container_app" "grpcclientapim" {
 
       env {
         name  = "GRPC_ENDPOINT"
-        value = "${azurerm_container_app.apimgateway.name}:8080"
+        value = "${azurerm_container_app.apimgateway.ingress[0].fqdn}:443"
       }
       
     }
@@ -252,8 +251,8 @@ resource "azurerm_container_app" "apimgateway" {
   template {
     container {
       name   = "apimgateway"
-      #image  = "mcr.microsoft.com/azure-api-management/gateway:v2"
-      image  = "mcr.microsoft.com/azure-api-management/gateway:2.7.1"
+      image  = "mcr.microsoft.com/azure-api-management/gateway:v2"
+      #image  = "mcr.microsoft.com/azure-api-management/gateway:2.7.1"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -280,9 +279,10 @@ resource "azurerm_container_app" "apimgateway" {
   }
 
   ingress {
-    external_enabled           = false
+    external_enabled           = true
     target_port                = 8080
-    transport                  = "tcp"
+    transport                  = "http2"
+    allow_insecure_connections = true
     traffic_weight {
       latest_revision = true
       percentage      = 100

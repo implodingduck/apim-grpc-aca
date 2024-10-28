@@ -18,10 +18,17 @@ def read_root():
 @app.get("/grpc")
 async def get_grpc(dice: str = "1d6"):
     #async with grpc.aio.insecure_channel(os.environ.get("GRPC_ENDPOINT")) as channel:
-    credentials = grpc.ssl_channel_credentials()
-    async with grpc.aio.secure_channel(os.environ.get("GRPC_ENDPOINT"), credentials) as channel:
-        stub = DicerollerStub(channel)
-        response = await stub.Roll(Dice(dice=dice))
-        
-        return { "input": response.input, "result": response.result }
+    if os.environ.get("GRPC_ENDPOINT").indexOf(":443") > -1:
+        credentials = grpc.ssl_channel_credentials()
+        async with grpc.aio.secure_channel(os.environ.get("GRPC_ENDPOINT"), credentials) as channel:
+            stub = DicerollerStub(channel)
+            response = await stub.Roll(Dice(dice=dice))
+            
+            return { "input": response.input, "result": response.result }   
+    else:
+        async with grpc.aio.insecure_channel(os.environ.get("GRPC_ENDPOINT")) as channel:
+            stub = DicerollerStub(channel)
+            response = await stub.Roll(Dice(dice=dice))
+            
+            return { "input": response.input, "result": response.result }   
 
