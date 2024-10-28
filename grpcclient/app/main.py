@@ -18,7 +18,7 @@ def read_root():
 @app.get("/grpc")
 async def get_grpc(dice: str = "1d6"):
     #async with grpc.aio.insecure_channel(os.environ.get("GRPC_ENDPOINT")) as channel:
-    if os.environ.get("GRPC_ENDPOINT").index(":443") > -1:
+    if os.environ.get("GRPC_ENDPOINT").find(":443") > -1:
         credentials = grpc.ssl_channel_credentials()
         async with grpc.aio.secure_channel(os.environ.get("GRPC_ENDPOINT"), credentials) as channel:
             stub = DicerollerStub(channel)

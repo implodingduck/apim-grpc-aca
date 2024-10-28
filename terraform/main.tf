@@ -256,10 +256,10 @@ resource "azurerm_container_app" "apimgateway" {
       cpu    = 0.25
       memory = "0.5Gi"
 
-      # env {
-      #   name  = "net.server.http.forwarded.proto.enabled"
-      #   value = "true"
-      # }
+      env {
+        name  = "net.server.http.forwarded.proto.enabled"
+        value = "true"
+      }
       env {
         name = "config.service.endpoint"
         secret_name = "config-service-endpoint"
@@ -281,7 +281,7 @@ resource "azurerm_container_app" "apimgateway" {
   ingress {
     external_enabled           = true
     target_port                = 8080
-    transport                  = "http2"
+    transport                  = "auto"
     allow_insecure_connections = true
     traffic_weight {
       latest_revision = true
