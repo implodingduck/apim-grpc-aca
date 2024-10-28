@@ -9,6 +9,17 @@ services:
   grpcclient:
     build: ./grpcclient
     ports:
-      - 8080:80
+      - 8082:80
     environment:
-      GRPC_ENDPOINT: apim-grpc-aca_grpcbackend_1:50051
+      GRPC_ENDPOINT: ${GRPC_ENDPOINT}
+
+
+  # grpcapimgateway:
+  #   image: mcr.microsoft.com/azure-api-management/gateway:v2
+  #   ports:
+  #     - 8080:8080
+  #   environment:
+  #     config.service.endpoint: ${CONFIG_SERVICE_ENDPOINT}
+  #     config.service.auth: ${CONFIG_SERVICE_AUTH}
+  #     runtime.deployment.artifact.source: Azure Portal
+  #     runtime.deployment.mechanism: Docker

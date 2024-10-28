@@ -6,4 +6,5 @@ cp -a pb grpcclient/app/
 docker-compose down
 docker-compose build
 docker-compose up -d
-docker logs -f apim-grpc-aca_grpcbackend_1
+#docker logs -f apim-grpc-aca_grpcbackend_1
+docker logs -f apim-grpc-aca_grpcclient_1

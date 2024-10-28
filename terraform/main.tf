@@ -17,9 +17,6 @@ terraform {
       version = "~> 2.53.1"
     }
   }
-  backend "azurerm" {
-
-  }
 }
 
 provider "azurerm" {
@@ -50,32 +47,6 @@ resource "azurerm_resource_group" "rg" {
   name     = "rg-${local.gh_repo}-${random_string.unique.result}-${local.loc_for_naming}"
   location = var.location
   tags = local.tags
-}
-
-resource "azurerm_virtual_network" "default" {
-  name                = "vnet-${local.cluster_name}"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-  address_space       = ["10.5.0.0/16"]
-
-  tags = local.tags
-}
-
-resource "azurerm_subnet" "cluster" {
-  name                 = "subnet-${local.cluster_name}"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.default.name
-  address_prefixes     = ["10.5.5.0/27"]
-
-  delegation {
-    name = "Microsoft.App/environments"
-    service_delegation {
-      name    = "Microsoft.App/environments"
-      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
-    }
-  
-  }
-
 }
 
 resource "azurerm_user_assigned_identity" "this" {
@@ -113,8 +84,6 @@ resource "azurerm_container_app_environment" "this" {
   resource_group_name        = azurerm_resource_group.rg.name
   log_analytics_workspace_id = data.azurerm_log_analytics_workspace.default.id
 
-  infrastructure_subnet_id = azurerm_subnet.cluster.id
-
   workload_profile {
     name                  = "Consumption"
     workload_profile_type = "Consumption"
@@ -124,8 +93,8 @@ resource "azurerm_container_app_environment" "this" {
 
 }
 
-resource "azurerm_container_app" "backend" {
-  name                         = "labby-backend"
+resource "azurerm_container_app" "grpcbackend" {
+  name                         = "grpcbackend"
   container_app_environment_id = azurerm_container_app_environment.this.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
@@ -133,54 +102,71 @@ resource "azurerm_container_app" "backend" {
 
   template {
     container {
-      name   = "backend"
-      image  = "ghcr.io/scallighan/labby-backend:latest"
+      name   = "grpcbackend"
+      image  = "ghcr.io/implodingduck/apim-grpc-aca-backend:latest"
       cpu    = 0.25
       memory = "0.5Gi"
-
-      env {
-        name  = "AZURE_SUBSCRIPTION_ID"
-        value = data.azurerm_client_config.current.subscription_id
-      }
-      env {
-        name  = "AZURE_TENANT_ID"
-        value = data.azurerm_client_config.current.tenant_id
-
-      }
-      env {
-        name  = "AZURE_CLIENT_ID"
-        value = azurerm_user_assigned_identity.this.client_id
-      }
-      env {
-        name = "AZURE_OPENAI_API_KEY"
-        secret_name = "azure-openai-api-key"
-      }
-      env {
-        name = "AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"
-        secret_name = "azure-openai-chat-deployment-name"
-      }
-      env {
-        name = "AZURE_OPENAI_ENDPOINT"
-        secret_name = "azure-openai-endpoint"
-      }
-      env {
-        name = "AZURE_OPENAI_TEXT_DEPLOYMENT_NAME"
-        secret_name = "azure-openai-text-deployment-name"
-      }
-      env {
-        name = "GLOBAL_LLM_SERVICE"
-        secret_name = "global-llm-service"
-      }
-      env {
-        name = "TOKEN_LIMIT"
-        value = "8192"
-      }
+      
     }
     http_scale_rule {
       name                = "http-1"
       concurrent_requests = "100"
     }
-    min_replicas = 0
+    min_replicas = 1
+    max_replicas = 1
+  }
+
+  ingress {
+    target_port = 50051
+    transport = "tcp"
+    allow_insecure_connections = false
+    external_enabled = false
+    exposed_port = 50051
+    
+    traffic_weight {
+      latest_revision = true
+      percentage = 100
+    }
+    
+  }
+
+  identity {
+    type = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.this.id]
+  }
+  tags = local.tags
+
+  lifecycle {
+    ignore_changes = [ secret ]
+  }
+}
+
+
+resource "azurerm_container_app" "grpcclient" {
+  name                         = "grpcclient"
+  container_app_environment_id = azurerm_container_app_environment.this.id
+  resource_group_name          = azurerm_resource_group.rg.name
+  revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
+
+  template {
+    container {
+      name   = "grpcclient"
+      image  = "ghcr.io/implodingduck/apim-grpc-aca-client:latest"
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      env {
+        name  = "GRPC_ENDPOINT"
+        value = "${azurerm_container_app.grpcbackend.name}:50051"
+      }
+      
+    }
+    http_scale_rule {
+      name                = "http-1"
+      concurrent_requests = "100"
+    }
+    min_replicas = 1
     max_replicas = 1
   }
 
@@ -195,37 +181,55 @@ resource "azurerm_container_app" "backend" {
     }
   }
 
-  secret {
-    name = "microsoft-provider-authentication-secret"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/CLIENT-SECRET"
+  identity {
+    type = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.this.id]
   }
-  secret {
-    name = "azure-openai-api-key"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/AZURE-OPENAI-API-KEY"
+  tags = local.tags
+
+  lifecycle {
+    ignore_changes = [ secret ]
+  }
+}
+
+resource "azurerm_container_app" "grpcclientapim" {
+  name                         = "grpcclientapim"
+  container_app_environment_id = azurerm_container_app_environment.this.id
+  resource_group_name          = azurerm_resource_group.rg.name
+  revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
+
+  template {
+    container {
+      name   = "grpcclient"
+      image  = "ghcr.io/implodingduck/apim-grpc-aca-client:latest"
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      env {
+        name  = "GRPC_ENDPOINT"
+        value = "${azurerm_container_app.apimgateway.name}:8080"
+      }
+      
+    }
+    http_scale_rule {
+      name                = "http-1"
+      concurrent_requests = "100"
+    }
+    min_replicas = 1
+    max_replicas = 1
   }
 
-  secret {
-    name = "azure-openai-chat-deployment-name"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/AZURE-OPENAI-CHAT-DEPLOYMENT-NAME"
+  ingress {
+    allow_insecure_connections = false
+    external_enabled           = true
+    target_port                = 80
+    transport                  = "auto"
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
   }
-  secret {
-    name = "azure-openai-endpoint"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/AZURE-OPENAI-ENDPOINT"
-  }
-  secret {
-    name = "azure-openai-text-deployment-name"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/AZURE-OPENAI-TEXT-DEPLOYMENT-NAME"
-  }
-  secret {
-    name = "global-llm-service"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/GLOBAL-LLM-SERVICE"
-  }   
 
   identity {
     type = "UserAssigned"
@@ -238,8 +242,8 @@ resource "azurerm_container_app" "backend" {
   }
 }
 
-resource "azurerm_container_app" "frontend" {
-  name                         = "labby-frontend"
+resource "azurerm_container_app" "apimgateway" {
+  name                         = "grpcapimgateway"
   container_app_environment_id = azurerm_container_app_environment.this.id
   resource_group_name          = azurerm_resource_group.rg.name
   revision_mode                = "Single"
@@ -247,36 +251,56 @@ resource "azurerm_container_app" "frontend" {
 
   template {
     container {
-      name   = "frontend"
-      image  = "ghcr.io/scallighan/labby-frontend:latest"
+      name   = "apimgateway"
+      #image  = "mcr.microsoft.com/azure-api-management/gateway:v2"
+      image  = "mcr.microsoft.com/azure-api-management/gateway:2.7.1"
       cpu    = 0.25
       memory = "0.5Gi"
 
+      # env {
+      #   name  = "net.server.http.forwarded.proto.enabled"
+      #   value = "true"
+      # }
       env {
-        name = "API_ENDPOINT"
-        value = "${azurerm_container_app.backend.ingress[0].fqdn}"
+        name = "config.service.endpoint"
+        secret_name = "config-service-endpoint"
       }
-
+      
+      env {
+        name = "config.service.auth"
+        secret_name = "config-service-token"
+      }
     }
     http_scale_rule {
       name                = "http-1"
       concurrent_requests = "100"
     }
-    min_replicas = 0
+    min_replicas = 1
     max_replicas = 1
   }
 
   ingress {
-    allow_insecure_connections = false
-    external_enabled           = true
-    target_port                = 80
-    transport                  = "auto"
+    external_enabled           = false
+    target_port                = 8080
+    transport                  = "tcp"
     traffic_weight {
       latest_revision = true
       percentage      = 100
     }
   }
   
+  secret {
+    name = "config-service-endpoint"
+    identity = azurerm_user_assigned_identity.this.id
+    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/CONFIG-SERVICE-ENDPOINT"
+  }
+
+  secret {
+    name = "config-service-token"
+    identity = azurerm_user_assigned_identity.this.id
+    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/CONFIG-SERVICE-TOKEN"
+  }
+
 
   identity {
     type = "UserAssigned"
@@ -289,163 +313,10 @@ resource "azurerm_container_app" "frontend" {
   }
 }
 
-
-resource "azurerm_container_app" "teamsbot" {
-  name                         = "labby-teamsbot"
-  container_app_environment_id = azurerm_container_app_environment.this.id
-  resource_group_name          = azurerm_resource_group.rg.name
-  revision_mode                = "Single"
-  workload_profile_name        = "Consumption"
-
-  template {
-    container {
-      name   = "teamsbot"
-      image  = "ghcr.io/scallighan/labby-teamsbot:latest"
-      cpu    = 0.25
-      memory = "0.5Gi"
-      env {
-        name = "AAD_APP_CLIENT_ID"
-        secret_name = "aad-app-client-id"
-      }
-      env {
-        name = "AAD_APP_CLIENT_SECRET"
-        secret_name = "aad-app-client-secret"
-      }
-
-      env {
-        name = "AAD_APP_TENANT_ID"
-        secret_name = "aad-app-tenant-id"
-      }
-
-      env {
-        name = "BOT_DOMAIN"
-        secret_name = "bot-domain"
-      }
-
-      env {
-        name = "BOT_ID"
-        secret_name = "bot-id"
-      }
-
-      env {
-        name = "BOT_PASSWORD"
-        secret_name = "bot-password"
-      }
-
-      env {
-        name = "BACKEND_CLIENT_ID"
-        secret_name = "backend-client-id"
-      }
-
-      env {
-        name = "AAD_APP_OAUTH_AUTHORITY_HOST"
-        value = "https://login.microsoftonline.com"
-      }
-
-      env {
-        name = "RUNNING_ON_AZURE"
-        value = "1"
-      }
-
-      env {
-        name = "BASE_URL"
-        value = "https://${azurerm_container_app.backend.ingress[0].fqdn}"
-      }
-      
-     
-    }
-    http_scale_rule {
-      name                = "http-1"
-      concurrent_requests = "100"
-    }
-    min_replicas = 0
-    max_replicas = 1
-  }
-
-  ingress {
-    allow_insecure_connections = false
-    external_enabled           = true
-    target_port                = 3978
-    transport                  = "auto"
-    traffic_weight {
-      latest_revision = true
-      percentage      = 100
-    }
-  }
-
-  secret {
-    name = "aad-app-client-id"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/AAD-APP-CLIENT-ID"
-  }
-  secret {
-    name = "aad-app-client-secret"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/AAD-APP-CLIENT-SECRET"
-  }
-
-  secret {
-    name = "aad-app-tenant-id"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/AAD-APP-TENANT-ID"
-  }
-  secret {
-    name = "bot-domain"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/BOT-DOMAIN"
-  }
-  secret {
-    name = "bot-id"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/BOT-ID"
-  }
-  secret {
-    name = "bot-password"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/BOT-PASSWORD"
-  }
-
-  secret {
-    name = "backend-client-id"
-    identity = azurerm_user_assigned_identity.this.id
-    key_vault_secret_id = "${azurerm_key_vault.kv.vault_uri}secrets/VITE-BACKEND-CLIENT-ID"
-  }   
-
-  identity {
-    type = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.this.id]
-  }
-  tags = local.tags
-
-  lifecycle {
-    ignore_changes = [ secret ]
-  }
-}
-
-
-resource "azapi_resource" "teamsbot" {
-  type = "Microsoft.BotService/botServices@2022-09-15"
-  name = "labby-teamsbot-bot"
-  location = "global"
-  parent_id = azurerm_resource_group.rg.id
-  tags = local.tags
-  body = jsonencode({
-    properties = {
-      displayName = "labby-teamsbot-bot"
-      endpoint = "https://${azurerm_container_app.teamsbot.ingress[0].fqdn}/api/messages"
-      msaAppId = var.bot_id
-      msaAppTenantId = var.bot_tenant_id
-      msaAppType = "SingleTenant"
-    }
-    sku = {
-      name = "F0"
-    }
-    kind = "azurebot"
-  })
-}
-
-resource "azurerm_bot_channel_ms_teams" "this" {
-  bot_name            = "labby-teamsbot-bot"
-  location            = "global"
+resource "azurerm_application_insights" "app" {
+  name                = "${local.cluster_name}-insights"
   resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  application_type    = "other"
+  workspace_id        = data.azurerm_log_analytics_workspace.default.id
 }

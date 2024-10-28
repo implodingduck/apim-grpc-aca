@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpcclient
+  namespace: grpc
+  labels:
+    app: grpcclient
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpcclient
+  template:
+    metadata:
+      labels:
+        app: grpcclient
+    spec:
+      containers:
+      - name: grpcclient
+        image: ghcr.io/implodingduck/apim-grpc-aca-client:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        env:
+        - name: GRPC_ENDPOINT
+          value: grpcbackend:50050
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpcclient
+  namespace: grpc
+  labels:
+    app: grpcclient
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: grpcclient
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpcclientapim
+  namespace: grpc
+  labels:
+    app: grpcclientapim
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpcclientapim
+  template:
+    metadata:
+      labels:
+        app: grpcclientapim
+    spec:
+      containers:
+      - name: grpcclient
+        image: ghcr.io/implodingduck/apim-grpc-aca-client:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+        env:
+        - name: GRPC_ENDPOINT
+          value: apimgrpck8s-live-traffic:80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpcclientapim
+  namespace: grpc
+  labels:
+    app: grpcclientapim
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8080
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: grpcclientapim
