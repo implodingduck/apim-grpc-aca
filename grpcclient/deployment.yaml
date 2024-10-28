@@ -23,7 +23,7 @@ spec:
         - containerPort: 80
         env:
         - name: GRPC_ENDPOINT
-          value: grpcbackend:50050
+          value: grpcbackend:50051
 ---
 apiVersion: v1
 kind: Service
@@ -66,7 +66,7 @@ spec:
         - containerPort: 80
         env:
         - name: GRPC_ENDPOINT
-          value: apimgrpck8s-live-traffic:80
+          value: apim.scallighan.com:443
 ---
 apiVersion: v1
 kind: Service

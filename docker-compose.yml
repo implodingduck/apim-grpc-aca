@@ -12,6 +12,8 @@ services:
       - 8082:80
     environment:
       GRPC_ENDPOINT: ${GRPC_ENDPOINT}
+      APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING}
+      OTEL_SERVICE_NAME: localgrpcclient
 
 
   # grpcapimgateway:

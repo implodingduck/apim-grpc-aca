@@ -106,6 +106,15 @@ resource "azurerm_container_app" "grpcbackend" {
       image  = "ghcr.io/implodingduck/apim-grpc-aca-backend:latest"
       cpu    = 0.25
       memory = "0.5Gi"
+
+      env {
+        name = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        value = azurerm_application_insights.app.connection_string
+      }
+      env {
+        name = "OTEL_SERVICE_NAME"
+        value = "grpcbackend"
+      }
       
     }
     http_scale_rule {
@@ -160,6 +169,15 @@ resource "azurerm_container_app" "grpcclient" {
         value = "${azurerm_container_app.grpcbackend.ingress[0].fqdn}:443"
       }
       
+      env {
+        name = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        value = azurerm_application_insights.app.connection_string
+      }
+      env {
+        name = "OTEL_SERVICE_NAME"
+        value = "grpcclient"
+      }
+
     }
     http_scale_rule {
       name                = "http-1"
@@ -207,7 +225,16 @@ resource "azurerm_container_app" "grpcclientapim" {
 
       env {
         name  = "GRPC_ENDPOINT"
-        value = "${azurerm_container_app.apimgateway.ingress[0].fqdn}:443"
+        value = var.apimendpoint
+      }
+
+      env {
+        name = "APPLICATIONINSIGHTS_CONNECTION_STRING"
+        value = azurerm_application_insights.app.connection_string
+      }
+      env {
+        name = "OTEL_SERVICE_NAME"
+        value = "grpcclientapim"
       }
       
     }

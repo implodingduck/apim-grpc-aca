@@ -12,3 +12,7 @@ variable "location" {
 variable "gh_repo" {
   type = string
 }
+
+variable "apimendpoint" {
+  type = string
+}

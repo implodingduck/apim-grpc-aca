@@ -33,7 +33,7 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-  - port: 50050
+  - port: 50051
     targetPort: 50051
     protocol: TCP
   selector:
