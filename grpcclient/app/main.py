@@ -13,6 +13,8 @@ from azure.monitor.opentelemetry import configure_azure_monitor
 from logging import getLogger
 from logging.config import dictConfig
 
+configure_azure_monitor(connection_string=os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"))
+
 log_config = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -32,7 +34,7 @@ log_config = {
         },
     },
     "loggers": {
-        "api-logger": {"handlers": ["default"], "level": "DEBUG"},
+        "api-logger": {"handlers": ["default"], "level": "INFO"},
         #"azure.monitor.opentelemetry": {"handlers": ["default"], "level": "DEBUG"},
     },
 }
@@ -40,8 +42,6 @@ log_config = {
 dictConfig(log_config)
 logger = getLogger("api-logger")
 logger.info(os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"))
-
-configure_azure_monitor(connection_string=os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING"))
 
 app = FastAPI()
 
